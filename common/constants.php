@@ -29,3 +29,6 @@ define('LOGIN_STATUS_KEY', 'login');
 define('MESSAGE_KEY', 'message');
 define('CHECKOUT_STATUS_KEY', 'checkout');
 define('ADD_TO_CART_STATUS_KEY', 'add_to_cart');
+define('CANCEL_ADD_TO_CART_STATUS_KEY', 'cancel_add_to_cart');
+define('PRODUCT_ID_KEY', 'product_id');
+define('PRODUCT_AMOUNT_KEY', 'amount');

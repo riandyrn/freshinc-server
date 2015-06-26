@@ -44,4 +44,15 @@ class Implementator extends Core
 	{
 		echo parent::checkout($user_id, $address);
 	}
+	
+	function addToCart($product_id, $amount, $user_id)
+	{
+		echo parent::addToCart($product_id, $amount, $user_id);
+	}
+	
+	function cancelPutProductToCart($user_id, $product_id, $amount)
+	{
+		echo parent::cancelPutProductToCart($user_id, $product_id, $amount);
+	}
+	
 }

@@ -301,7 +301,7 @@ class Core
 		return $result[0]['amount']; // ini pasti ada soalnya
 	}
 	
-	public function cancelPutProductToCart($user_id, $product_id, $amount)
+	protected function cancelPutProductToCart($user_id, $product_id, $amount)
 	{
 		/*
 		 * tambahkan amount ke products, hapus data di carts
@@ -321,6 +321,13 @@ class Core
 			/* array('field' => 'amount', 'operator' => '=', 'value' => $amount) */
 		);
 		
-		$this->db->executeDelete(CARTS_TABLE, $conditions, 'AND');
+		$ret = array(
+			CANCEL_ADD_TO_CART_STATUS_KEY => $this->db->executeDelete(CARTS_TABLE, $conditions, 'AND'),
+			USER_ID_KEY => $user_id,
+			PRODUCT_ID_KEY => $product_id,
+			PRODUCT_AMOUNT_KEY => $amount
+		);
+		
+		return json_encode($ret);
 	}
 }
