@@ -66,21 +66,24 @@ class Core
 		return json_encode($ret);
 	}
 	
-	protected function checkout($user_id, $json_arr_products_in_cart, $address = null)
+	protected function checkout($user_id, $address = null)
 	{
 		
 		/*
 		 * harusnya ini nggak pake $json lagi tapi
 		 * nge-SELECT dari carts untuk $user_id ini
+		 * --> untuk menghindari manipulasi data oleh 
+		 * client
 		 */
 		$ret = array(CHECKOUT_STATUS_KEY => false, MESSAGE_KEY => null);
+		$arr_user_cart = $this->getArrayUserCart($user_id);
 		
-		$total_price = $this->getTotalPrice($json_arr_products_in_cart);
+		$total_price = $this->getTotalPriceInUserCart($arr_user_cart);
 		$user_balance = $this->getUserBalance($user_id);
 		
 		if($user_balance >= $total_price)
 		{
-			$ret[CHECKOUT_STATUS_KEY] = $this->processCheckOut($user_id, $json_arr_products_in_cart, $address, $user_balance, $user_balance - $total_price);
+			$ret[CHECKOUT_STATUS_KEY] = $this->processCheckOut($user_id, $arr_user_cart, $address, $user_balance, $user_balance - $total_price);
 			$ret[MESSAGE_KEY] = CHECKOUT_IS_DONE_NOTIFICATION;
 		}
 		else 
@@ -91,14 +94,33 @@ class Core
 		return json_encode($ret);
 	}
 	
-	private function getTotalPrice($json_arr_products_in_cart)
+	private function getArrayUserCart($user_id)
 	{
-		$products = json_decode($json_arr_products_in_cart);
+		/*
+		 * ini bakalan return array dari cart yang
+		 * bakalan digunakan untuk logging di checkout
+		 * dan penghitungan total harga
+		 */
+		
+		$query = "SELECT product_id, amount FROM " . CARTS_TABLE . " WHERE user_id=?";
+		$data_array = array($user_id);
+		$type = "i";
+		
+		return $this->db->executePreparedSelect($query, $data_array, $type);
+	}
+	
+	private function getJSONProductsInUserCart($arr_user_cart)
+	{
+		return json_encode($arr_user_cart);
+	}
+	
+	private function getTotalPriceInUserCart($arr_user_cart)
+	{
 		$total_price = 0;
 		
-		foreach($products as $product)
+		foreach($arr_user_cart as $product)
 		{
-			$arr_price = $this->getArrayProductPrice($product['id']);
+			$arr_price = $this->getArrayProductPrice($product['product_id']);
 			$price = $product['amount'] * $arr_price['price_per_divider'] / $arr_price['divider'];
 			$total_price = $total_price + $price;
 		}
@@ -128,13 +150,8 @@ class Core
 		return $ret[0]['balance']; //asumsi $user_id selalu ada di db
 	}
 	
-	private function processCheckOut($user_id, $json_arr_products_in_cart, $address, $start_balance, $end_balance)
+	private function processCheckOut($user_id, $arr_user_cart, $address, $start_balance, $end_balance)
 	{
-		/*
-		 * ini belum dioptimasi kalau ada race condition
-		 * --> race condition harusnya pas produk dimasukin 
-		 * ke cart
-		 */
 		
 		if(!$adress)
 		{
@@ -143,15 +160,42 @@ class Core
 		
 		$data_array = array(
 			'user_id' => $user_id,
-			'goods' => $json_arr_products_in_cart,
+			'goods' => $this->getJSONProductsInUserCart($arr_user_cart),
 			'address' => $address,
 			'start_balance' => $start_balance,
-			'end_balance' => $end_balance
+			'end_balance' => $end_balance,
+			'time' => date('Y-m-d H:i:s', strtotime('now')) //get current time
 		);
 		
 		$type = "issii";
-				
-		return $this->db->executePreparedInsert(LOGS_TABLE, $data_array, $type);
+		
+		/*
+		 * harusnya ini ditambah penghapusan data di cart juga
+		 */
+		
+		$ret = $this->db->executePreparedInsert(LOGS_TABLE, $data_array, $type);
+		$ret = $ret && $this->deleteUserProductsInCarts($user_id, $arr_user_cart);
+		
+		return $ret;
+	}
+	
+	private function deleteUserProductsInCarts($user_id, $arr_user_cart)
+	{
+		$query = "DELETE FROM " . CARTS_TABLE . " WHERE user_id=" . $user_id . " AND (";
+		
+		for($i = 0; $i < count($arr_user_cart); $i++)
+		{
+			$query = $query . "product_id=" . $arr_user_cart[$i]['product_id'];
+			
+			if($i < count($arr_user_cart) - 1)
+			{
+				$query = $query . " OR ";
+			}
+		}
+		
+		$query = $query . ")";
+		
+		return $this->db->executeQuery($query);
 	}
 	
 	private function getUserAdress($user_id)
@@ -214,10 +258,36 @@ class Core
 		/* 
 		 * ini harusnya dicek dulu apakah recordnya udah ada atau belum
 		 * kalo udah udah ada dia bakalan update, kalo belum dia bakalan
-		 * insert
+		 * insert --> biar satu product per user cuma satu record --> DONE
 		 */
 		
-		return $status && $this->db->executePreparedInsert(CARTS_TABLE, $data_array, $type);
+		$ret = true;
+		if($this->isUserProductExistInCart($user_id, $product_id))
+		{
+			$ret = $this->db->executeIncrement(CARTS_TABLE, 'amount', $amount, 'user_id', $user_id);	
+		}
+		else 
+		{
+			$ret = $this->db->executePreparedInsert(CARTS_TABLE, $data_array, $type);
+		}
+		
+		return $status && $ret;
+	}
+	
+	private function isUserProductExistInCart($user_id, $product_id)
+	{
+		$query = "SELECT * FROM " . CARTS_TABLE . " WHERE user_id=? AND product_id=? LIMIT 1";
+		$data_array = array($user_id, $product_id);
+		$type = "ii";
+		
+		$result = $this->db->executePreparedSelect($query, $data_array, $type);
+		
+		if(count($result) > 0)
+		{
+			return true;
+		}
+		
+		return false;
 	}
 	
 	private function getCurrentAmountOfProduct($product_id)
@@ -237,17 +307,18 @@ class Core
 		 * tambahkan amount ke products, hapus data di carts
 		 */
 		
+		$this->db->executeIncrement(PRODUCTS_TABLE, 'amount', $amount, 'id', $product_id);
+
 		/*
 		 * harusnya ini nggak perlu $amount, karena yang
-		 * penting berhasil dieksekusi
-		 */
-		$this->db->executeIncrement(PRODUCTS_TABLE, 'amount', $amount, 'id', $product_id);
+		* penting berhasil dieksekusi --> DONE
+		*/
 		
 		$conditions = array
 		(
 			array('field' => 'user_id', 'operator' => '=', 'value' => $user_id),
 			array('field' => 'product_id', 'operator' => '=', 'value' => $product_id),
-			array('field' => 'amount', 'operator' => '=', 'value' => $amount)
+			/* array('field' => 'amount', 'operator' => '=', 'value' => $amount) */
 		);
 		
 		$this->db->executeDelete(CARTS_TABLE, $conditions, 'AND');

@@ -108,7 +108,7 @@ class Database
 		return $this->conn->query($statement);
 	}
 	
-	public function executeDelete($table_name, $conditions = array(), $logic_operator = null)
+	public function executeDelete($table_name, $arr_conditions = array(), $logic_operator = null)
 	{
 		/*
 		 * $field_name --> where field
@@ -124,16 +124,16 @@ class Database
 		 */
 		$statement = "DELETE FROM " . $table_name;
 		
-		if(count($conditions) > 0)
+		if(count($arr_conditions) > 0)
 		{
 			$statement = $statement . " WHERE ";
-			for($i = 0; $i < count($conditions); $i++)
+			for($i = 0; $i < count($arr_conditions); $i++)
 			{
-				$statement = $statement . $conditions[$i]['field'] 
-								. $conditions[$i]['operator'] . "'" 
-									. $conditions[$i]['value'] . "'";
+				$statement = $statement . $arr_conditions[$i]['field'] 
+								. $arr_conditions[$i]['operator'] . "'" 
+									. $arr_conditions[$i]['value'] . "'";
 				
-				if($i < count($conditions) - 1)
+				if($i < count($arr_conditions) - 1)
 				{
 					$statement = $statement . ' ' . $logic_operator . ' ';
 				}
@@ -141,6 +141,11 @@ class Database
 		}
 		
 		return $this->conn->query($statement);
+	}
+	
+	public function executeQuery($query)
+	{
+		return $this->conn->query($query);
 	}
 	
 	public function executeInsert($table_name, $data_array)

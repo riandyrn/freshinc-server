@@ -40,8 +40,8 @@ class Implementator extends Core
 		echo parent::login($username, $password);
 	}
 	
-	function checkout($user_id, $json_arr_products_in_cart, $address = null)
+	function checkout($user_id, $address = null)
 	{
-		echo parent::checkout($user_id, $json_arr_products_in_cart, $address);
+		echo parent::checkout($user_id, $address);
 	}
 }
